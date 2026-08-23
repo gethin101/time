@@ -38,6 +38,13 @@
         gap: 0.75rem;
         align-items: center;
         margin-bottom: 1rem;
+        flex-wrap: wrap;
+      }
+
+      .controls-left {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
       }
 
       select {
@@ -80,6 +87,10 @@
           align-items: stretch;
         }
 
+        .controls-left {
+          width: 100%;
+        }
+
         #meta {
           text-align: left;
         }
@@ -89,7 +100,14 @@
   <body>
     <main class="panel">
       <div class="controls">
-        <select id="target"></select>
+        <div class="controls-left">
+          <select id="target" aria-label="Target"></select>
+          <select id="unit" aria-label="Unit">
+            <option value="days">Days</option>
+            <option value="months">Months</option>
+            <option value="years">Years</option>
+          </select>
+        </div>
         <div id="meta"></div>
       </div>
       <section id="grid" aria-label="time grid"></section>
@@ -100,13 +118,13 @@
         { label: "P", date: "2027-06-19" },
         { label: "C", date: "2027-10-18" },
         { label: "A", date: "2028-10-17" },
+        { label: "D", date: "2100-10-17" },
       ];
 
       const dayMs = 24 * 60 * 60 * 1000;
-      const now = new Date();
-      const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
 
       const targetSelect = document.getElementById("target");
+      const unitSelect = document.getElementById("unit");
       const grid = document.getElementById("grid");
       const meta = document.getElementById("meta");
 
@@ -122,36 +140,84 @@
         return Date.UTC(year, month - 1, day);
       }
 
-      function daysBetween(fromUtc, toUtc) {
-        return Math.ceil((toUtc - fromUtc) / dayMs);
+      function getTodayUtcMidnight() {
+        const now = new Date();
+        return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
       }
 
-      function getBoxSize(totalDays) {
-        if (totalDays > 1000) return 8;
-        if (totalDays > 700) return 9;
-        if (totalDays > 450) return 11;
-        if (totalDays > 250) return 13;
+      function daysBetween(fromUtc, toUtc) {
+        return Math.max(0, Math.ceil((toUtc - fromUtc) / dayMs));
+      }
+
+      function monthsBetween(fromDate, toDate) {
+        let months =
+          (toDate.getUTCFullYear() - fromDate.getUTCFullYear()) * 12 +
+          (toDate.getUTCMonth() - fromDate.getUTCMonth());
+
+        if (toDate.getUTCDate() > fromDate.getUTCDate()) {
+          months += 1;
+        }
+
+        return Math.max(0, months);
+      }
+
+      function yearsBetween(fromDate, toDate) {
+        let years = toDate.getUTCFullYear() - fromDate.getUTCFullYear();
+
+        const toMonth = toDate.getUTCMonth();
+        const fromMonth = fromDate.getUTCMonth();
+        const toDay = toDate.getUTCDate();
+        const fromDay = fromDate.getUTCDate();
+
+        if (toMonth > fromMonth || (toMonth === fromMonth && toDay > fromDay)) {
+          years += 1;
+        }
+
+        return Math.max(0, years);
+      }
+
+      function getBoxSize(totalUnits) {
+        if (totalUnits > 1000) return 8;
+        if (totalUnits > 700) return 9;
+        if (totalUnits > 450) return 11;
+        if (totalUnits > 250) return 13;
         return 16;
       }
 
       function render() {
         const selected = targets.find((item) => item.label === targetSelect.value) ?? targets[0];
+        const unit = unitSelect.value;
+
+        const todayUtc = getTodayUtcMidnight();
         const targetUtc = toUtcMidnight(selected.date);
 
-        // Start from today (no backlog from past days)
-        const totalDays = Math.max(0, daysBetween(todayUtc, targetUtc));
+        const todayDate = new Date(todayUtc);
+        const targetDate = new Date(targetUtc);
 
-        // No filled backlog on first load
+        let totalUnits = 0;
+        let unitLabel = "days";
+
+        if (unit === "months") {
+          totalUnits = monthsBetween(todayDate, targetDate);
+          unitLabel = "months";
+        } else if (unit === "years") {
+          totalUnits = yearsBetween(todayDate, targetDate);
+          unitLabel = "years";
+        } else {
+          totalUnits = daysBetween(todayUtc, targetUtc);
+          unitLabel = "days";
+        }
+
         const complete = 0;
-        const remaining = totalDays;
+        const remaining = totalUnits;
 
-        const boxSize = getBoxSize(totalDays);
+        const boxSize = getBoxSize(totalUnits);
         const columns = Math.max(12, Math.min(36, Math.floor((window.innerWidth * 0.9) / (boxSize + 6))));
 
         grid.style.gridTemplateColumns = `repeat(${columns}, ${boxSize}px)`;
         grid.innerHTML = "";
 
-        for (let i = 0; i < totalDays; i++) {
+        for (let i = 0; i < totalUnits; i++) {
           const box = document.createElement("div");
           box.className = `box${i < complete ? " done" : ""}`;
           box.style.width = `${boxSize}px`;
@@ -159,16 +225,20 @@
           grid.appendChild(box);
         }
 
-        meta.textContent = `${selected.label} • ${remaining} days left`;
+        meta.textContent = `${selected.label} • ${remaining} ${unitLabel} left`;
       }
 
       targetSelect.value = targets[0].label;
+      unitSelect.value = "days";
+
       targetSelect.addEventListener("change", render);
+      unitSelect.addEventListener("change", render);
       window.addEventListener("resize", render);
+
       render();
 
       setInterval(() => {
-        location.reload();
+        render();
       }, 60 * 1000);
     </script>
   </body>
