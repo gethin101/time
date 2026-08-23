@@ -1,1 +1,182 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Time Squares</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
 
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: radial-gradient(circle at top, #1f2937, #0f172a 58%);
+        color: #e2e8f0;
+        font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      }
+
+      .panel {
+        width: min(980px, 92vw);
+        background: rgba(15, 23, 42, 0.75);
+        border: 1px solid rgba(148, 163, 184, 0.22);
+        border-radius: 18px;
+        backdrop-filter: blur(8px);
+        padding: 1rem;
+      }
+
+      .controls {
+        display: flex;
+        justify-content: space-between;
+        gap: 0.75rem;
+        align-items: center;
+        margin-bottom: 1rem;
+      }
+
+      select {
+        appearance: none;
+        border-radius: 10px;
+        border: 1px solid #334155;
+        background: #0f172a;
+        color: #e2e8f0;
+        padding: 0.55rem 0.8rem;
+        font-size: 1rem;
+        min-width: 160px;
+      }
+
+      #meta {
+        color: #94a3b8;
+        font-size: 0.95rem;
+        text-align: right;
+      }
+
+      #grid {
+        display: grid;
+        gap: 6px;
+        justify-content: center;
+      }
+
+      .box {
+        border-radius: 3px;
+        background: #334155;
+        border: 1px solid rgba(148, 163, 184, 0.12);
+      }
+
+      .box.done {
+        background: #22c55e;
+        border-color: rgba(22, 163, 74, 0.8);
+      }
+
+      @media (max-width: 640px) {
+        .controls {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        #meta {
+          text-align: left;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="panel">
+      <div class="controls">
+        <select id="target"></select>
+        <div id="meta"></div>
+      </div>
+      <section id="grid" aria-label="time grid"></section>
+    </main>
+
+    <script>
+      const targets = [
+        { label: "P", date: "2027-06-19" },
+        { label: "C", date: "2027-10-18" },
+        { label: "A", date: "2028-10-17" },
+      ];
+
+      const startStoreKey = "timeSquaresStartedAt";
+      const dayMs = 24 * 60 * 60 * 1000;
+      const now = new Date();
+      const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+
+      const storedStart = Number(localStorage.getItem(startStoreKey));
+      const startUtc = Number.isFinite(storedStart)
+        ? storedStart
+        : todayUtc;
+
+      if (!Number.isFinite(storedStart)) {
+        localStorage.setItem(startStoreKey, String(startUtc));
+      }
+
+      const targetSelect = document.getElementById("target");
+      const grid = document.getElementById("grid");
+      const meta = document.getElementById("meta");
+
+      targets.forEach((item) => {
+        const option = document.createElement("option");
+        option.value = item.label;
+        option.textContent = item.label;
+        targetSelect.appendChild(option);
+      });
+
+      function toUtcMidnight(dateString) {
+        const [year, month, day] = dateString.split("-").map(Number);
+        return Date.UTC(year, month - 1, day);
+      }
+
+      function daysBetween(fromUtc, toUtc) {
+        return Math.ceil((toUtc - fromUtc) / dayMs);
+      }
+
+      function getBoxSize(totalDays) {
+        if (totalDays > 1000) return 8;
+        if (totalDays > 700) return 9;
+        if (totalDays > 450) return 11;
+        if (totalDays > 250) return 13;
+        return 16;
+      }
+
+      function render() {
+        const selected = targets.find((item) => item.label === targetSelect.value) ?? targets[0];
+        const targetUtc = toUtcMidnight(selected.date);
+        const totalDays = Math.max(0, daysBetween(startUtc, targetUtc));
+        const elapsedDays = Math.max(0, daysBetween(startUtc, todayUtc));
+        const complete = Math.min(totalDays, elapsedDays);
+        const remaining = Math.max(0, totalDays - complete);
+
+        const boxSize = getBoxSize(totalDays);
+        const columns = Math.max(12, Math.min(36, Math.floor((window.innerWidth * 0.9) / (boxSize + 6))));
+
+        grid.style.gridTemplateColumns = `repeat(${columns}, ${boxSize}px)`;
+        grid.innerHTML = "";
+
+        for (let i = 0; i < totalDays; i++) {
+          const box = document.createElement("div");
+          box.className = `box${i < complete ? " done" : ""}`;
+          box.style.width = `${boxSize}px`;
+          box.style.height = `${boxSize}px`;
+          grid.appendChild(box);
+        }
+
+        meta.textContent = `${selected.label} • ${remaining} days left`;
+      }
+
+      targetSelect.value = targets[0].label;
+      targetSelect.addEventListener("change", render);
+      window.addEventListener("resize", render);
+      render();
+
+      setInterval(() => {
+        location.reload();
+      }, 60 * 1000);
+    </script>
+  </body>
+</html>
