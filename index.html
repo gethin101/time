@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Time Squares</title>
+    <title>Time</title>
     <style>
       :root {
         color-scheme: dark;
@@ -102,19 +102,9 @@
         { label: "A", date: "2028-10-17" },
       ];
 
-      const startStoreKey = "timeSquaresStartedAt";
       const dayMs = 24 * 60 * 60 * 1000;
       const now = new Date();
       const todayUtc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-
-      const storedStart = Number(localStorage.getItem(startStoreKey));
-      const startUtc = Number.isFinite(storedStart)
-        ? storedStart
-        : todayUtc;
-
-      if (!Number.isFinite(storedStart)) {
-        localStorage.setItem(startStoreKey, String(startUtc));
-      }
 
       const targetSelect = document.getElementById("target");
       const grid = document.getElementById("grid");
@@ -147,10 +137,13 @@
       function render() {
         const selected = targets.find((item) => item.label === targetSelect.value) ?? targets[0];
         const targetUtc = toUtcMidnight(selected.date);
-        const totalDays = Math.max(0, daysBetween(startUtc, targetUtc));
-        const elapsedDays = Math.max(0, daysBetween(startUtc, todayUtc));
-        const complete = Math.min(totalDays, elapsedDays);
-        const remaining = Math.max(0, totalDays - complete);
+
+        // Start from today (no backlog from past days)
+        const totalDays = Math.max(0, daysBetween(todayUtc, targetUtc));
+
+        // No filled backlog on first load
+        const complete = 0;
+        const remaining = totalDays;
 
         const boxSize = getBoxSize(totalDays);
         const columns = Math.max(12, Math.min(36, Math.floor((window.innerWidth * 0.9) / (boxSize + 6))));
