@@ -58,6 +58,19 @@
         min-width: 160px;
       }
 
+      /* button styling near selects */
+      #add-custom {
+        appearance: none;
+        border-radius: 10px;
+        border: 1px solid #334155;
+        background: #0f172a;
+        color: #e2e8f0;
+        padding: 0.55rem 0.6rem;
+        font-size: 1rem;
+        margin-left: 0.5rem;
+        cursor: pointer;
+      }
+
       #meta {
         color: #94a3b8;
         font-size: 0.95rem;
@@ -94,6 +107,10 @@
         #meta {
           text-align: left;
         }
+
+        #add-custom {
+          margin-left: 0;
+        }
       }
     </style>
   </head>
@@ -102,6 +119,7 @@
       <div class="controls">
         <div class="controls-left">
           <select id="target" aria-label="Target"></select>
+          <button id="add-custom" aria-label="Add custom target">+ Custom</button>
           <select id="unit" aria-label="Unit">
             <option value="days">Days</option>
             <option value="months">Months</option>
@@ -125,14 +143,39 @@
 
       const targetSelect = document.getElementById("target");
       const unitSelect = document.getElementById("unit");
+      const addCustomBtn = document.getElementById("add-custom");
       const grid = document.getElementById("grid");
       const meta = document.getElementById("meta");
 
+      // Populate built-in targets
       targets.forEach((item) => {
         const option = document.createElement("option");
         option.value = item.label;
         option.textContent = item.label;
         targetSelect.appendChild(option);
+      });
+
+      // Temporary custom targets are stored only in the DOM as option.dataset.date.
+      // They are ephemeral and will be lost on page reload (no persistence).
+      addCustomBtn.addEventListener("click", () => {
+        const date = prompt("Enter date (YYYY-MM-DD):");
+        if (!date) return;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+          alert("Invalid date format — please use YYYY-MM-DD");
+          return;
+        }
+        let label = prompt("Enter label (short name shown in the select):", "T");
+        if (label === null) return;
+        label = label.trim() || `T`;
+
+        const value = "custom-" + Date.now();
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        option.dataset.date = date;
+        targetSelect.appendChild(option);
+        targetSelect.value = value;
+        render();
       });
 
       function toUtcMidnight(dateString) {
@@ -185,7 +228,14 @@
       }
 
       function render() {
-        const selected = targets.find((item) => item.label === targetSelect.value) ?? targets[0];
+        // Support built-in targets (from the targets array) and temporary custom options
+        const selectedOption = targetSelect.selectedOptions[0];
+        let selected;
+        if (selectedOption && selectedOption.dataset && selectedOption.dataset.date) {
+          selected = { label: selectedOption.textContent, date: selectedOption.dataset.date };
+        } else {
+          selected = targets.find((item) => item.label === targetSelect.value) ?? targets[0];
+        }
         const unit = unitSelect.value;
 
         const todayUtc = getTodayUtcMidnight();
@@ -233,6 +283,7 @@
 
       targetSelect.addEventListener("change", render);
       unitSelect.addEventListener("change", render);
+      // If user adds a custom option it will be selected and render called from the click handler.
       window.addEventListener("resize", render);
 
       render();
