@@ -58,7 +58,6 @@
         min-width: 160px;
       }
 
-      /* button styling near selects */
       #add-custom {
         appearance: none;
         border-radius: 10px;
@@ -122,8 +121,6 @@
           <button id="add-custom" aria-label="Add custom target">+ Custom</button>
           <select id="unit" aria-label="Unit">
             <option value="days">Days</option>
-            <option value="months">Months</option>
-            <option value="years">Years</option>
           </select>
         </div>
         <div id="meta"></div>
@@ -132,11 +129,13 @@
     </main>
 
     <script>
+      const START_DATE = "2026-08-26";
+
       const targets = [
-        { label: "P", date: "2027-06-19" },
-        { label: "C", date: "2027-10-18" },
-        { label: "A", date: "2028-10-17" },
-        { label: "D", date: "2100-10-17" },
+        { label: "P", date: "2027-06-19", start: START_DATE },
+        { label: "C", date: "2027-10-18", start: START_DATE },
+        { label: "A", date: "2028-10-17", start: START_DATE },
+        { label: "D", date: "2100-10-17", start: START_DATE },
       ];
 
       const dayMs = 24 * 60 * 60 * 1000;
@@ -147,33 +146,35 @@
       const grid = document.getElementById("grid");
       const meta = document.getElementById("meta");
 
-      // Populate built-in targets
       targets.forEach((item) => {
         const option = document.createElement("option");
         option.value = item.label;
         option.textContent = item.label;
+        option.dataset.date = item.date;
+        option.dataset.start = item.start;
         targetSelect.appendChild(option);
       });
 
-      // Temporary custom targets are stored only in the DOM as option.dataset.date.
-      // They are ephemeral and will be lost on page reload (no persistence).
       addCustomBtn.addEventListener("click", () => {
-        const date = prompt("Enter date (YYYY-MM-DD):");
+        const date = prompt("Enter target date (YYYY-MM-DD):");
         if (!date) return;
         if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
           alert("Invalid date format — please use YYYY-MM-DD");
           return;
         }
+
         let label = prompt("Enter label (short name shown in the select):", "T");
         if (label === null) return;
-        label = label.trim() || `T`;
+        label = label.trim() || "T";
 
         const value = "custom-" + Date.now();
         const option = document.createElement("option");
         option.value = value;
         option.textContent = label;
         option.dataset.date = date;
+        option.dataset.start = getTodayIsoUtc(); // start at day created
         targetSelect.appendChild(option);
+
         targetSelect.value = value;
         render();
       });
@@ -188,35 +189,16 @@
         return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
       }
 
-      function daysBetween(fromUtc, toUtc) {
-        return Math.max(0, Math.ceil((toUtc - fromUtc) / dayMs));
+      function getTodayIsoUtc() {
+        const now = new Date();
+        const y = now.getUTCFullYear();
+        const m = String(now.getUTCMonth() + 1).padStart(2, "0");
+        const d = String(now.getUTCDate()).padStart(2, "0");
+        return `${y}-${m}-${d}`;
       }
 
-      function monthsBetween(fromDate, toDate) {
-        let months =
-          (toDate.getUTCFullYear() - fromDate.getUTCFullYear()) * 12 +
-          (toDate.getUTCMonth() - fromDate.getUTCMonth());
-
-        if (toDate.getUTCDate() > fromDate.getUTCDate()) {
-          months += 1;
-        }
-
-        return Math.max(0, months);
-      }
-
-      function yearsBetween(fromDate, toDate) {
-        let years = toDate.getUTCFullYear() - fromDate.getUTCFullYear();
-
-        const toMonth = toDate.getUTCMonth();
-        const fromMonth = fromDate.getUTCMonth();
-        const toDay = toDate.getUTCDate();
-        const fromDay = fromDate.getUTCDate();
-
-        if (toMonth > fromMonth || (toMonth === fromMonth && toDay > fromDay)) {
-          years += 1;
-        }
-
-        return Math.max(0, years);
+      function wholeDaysBetween(fromUtc, toUtc) {
+        return Math.floor((toUtc - fromUtc) / dayMs);
       }
 
       function getBoxSize(totalUnits) {
@@ -228,69 +210,52 @@
       }
 
       function render() {
-        // Support built-in targets (from the targets array) and temporary custom options
         const selectedOption = targetSelect.selectedOptions[0];
-        let selected;
-        if (selectedOption && selectedOption.dataset && selectedOption.dataset.date) {
-          selected = { label: selectedOption.textContent, date: selectedOption.dataset.date };
-        } else {
-          selected = targets.find((item) => item.label === targetSelect.value) ?? targets[0];
-        }
-        const unit = unitSelect.value;
+        if (!selectedOption) return;
 
+        const targetDateStr = selectedOption.dataset.date;
+        const startDateStr = selectedOption.dataset.start || getTodayIsoUtc();
+
+        const startUtc = toUtcMidnight(startDateStr);
         const todayUtc = getTodayUtcMidnight();
-        const targetUtc = toUtcMidnight(selected.date);
+        const targetUtc = toUtcMidnight(targetDateStr);
 
-        const todayDate = new Date(todayUtc);
-        const targetDate = new Date(targetUtc);
+        const totalDays = Math.max(0, wholeDaysBetween(startUtc, targetUtc));
+        let completeDays = Math.max(0, wholeDaysBetween(startUtc, todayUtc));
+        completeDays = Math.min(completeDays, totalDays);
+        const remainingDays = Math.max(0, totalDays - completeDays);
 
-        let totalUnits = 0;
-        let unitLabel = "days";
-
-        if (unit === "months") {
-          totalUnits = monthsBetween(todayDate, targetDate);
-          unitLabel = "months";
-        } else if (unit === "years") {
-          totalUnits = yearsBetween(todayDate, targetDate);
-          unitLabel = "years";
-        } else {
-          totalUnits = daysBetween(todayUtc, targetUtc);
-          unitLabel = "days";
-        }
-
-        const complete = 0;
-        const remaining = totalUnits;
-
-        const boxSize = getBoxSize(totalUnits);
-        const columns = Math.max(12, Math.min(36, Math.floor((window.innerWidth * 0.9) / (boxSize + 6))));
+        const boxSize = getBoxSize(totalDays);
+        const columns = Math.max(
+          12,
+          Math.min(36, Math.floor((window.innerWidth * 0.9) / (boxSize + 6)))
+        );
 
         grid.style.gridTemplateColumns = `repeat(${columns}, ${boxSize}px)`;
         grid.innerHTML = "";
 
-        for (let i = 0; i < totalUnits; i++) {
+        for (let i = 0; i < totalDays; i++) {
           const box = document.createElement("div");
-          box.className = `box${i < complete ? " done" : ""}`;
+          box.className = `box${i < completeDays ? " done" : ""}`;
           box.style.width = `${boxSize}px`;
           box.style.height = `${boxSize}px`;
           grid.appendChild(box);
         }
 
-        meta.textContent = `${selected.label} • ${remaining} ${unitLabel} left`;
+        meta.textContent = `${selectedOption.textContent} • ${completeDays}/${totalDays} days (${remainingDays} left)`;
       }
 
       targetSelect.value = targets[0].label;
       unitSelect.value = "days";
+      unitSelect.disabled = true;
 
       targetSelect.addEventListener("change", render);
-      unitSelect.addEventListener("change", render);
-      // If user adds a custom option it will be selected and render called from the click handler.
       window.addEventListener("resize", render);
 
       render();
 
-      setInterval(() => {
-        render();
-      }, 60 * 1000);
+      // Re-render every minute; at UTC day rollover, one more square becomes green.
+      setInterval(render, 60 * 1000);
     </script>
   </body>
 </html>
